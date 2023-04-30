@@ -36,7 +36,7 @@ export function useStoreLocation() {
 
   const generateBaseLocation = async () => {
     const [lat, lng] = randomFeatureCoordinates(
-      jpGeoJson.features[Math.floor(Math.random() * 46)]
+      jpGeoJson.features[Math.floor(Math.random() * 46)] as d3.ExtendedFeature
     )().reverse();
 
     setBaseLocation({ lat, lng });
