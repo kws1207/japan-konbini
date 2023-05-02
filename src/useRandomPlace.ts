@@ -1,12 +1,8 @@
 import { useState, useEffect } from "react";
-import { map } from "./App";
+import { map } from "./StreetView";
 import * as d3 from "d3";
 import jpGeoJson from "./assets/japan.json";
-
-type Location = {
-  lat: number;
-  lng: number;
-};
+import { PlaceType, Location } from "./type";
 
 // https://observablehq.com/@jeffreymorganio/random-coordinates-within-a-country
 function randomBoundingBoxCoordinates(boundingBox: number[][]) {
@@ -30,12 +26,14 @@ function randomFeatureCoordinates(feature: d3.ExtendedFeature) {
   };
 }
 
-export function useStoreLocation() {
+export function useRandomPlace(placeType: PlaceType) {
   const [baseLoaction, setBaseLocation] = useState<Location | undefined>();
   const [storeLocation, setStoreLocation] = useState<Location | undefined>();
 
   const generateBaseLocation = async () => {
     const [lat, lng] = randomFeatureCoordinates(
+      // eslint-disable-next-line
+      // @ts-ignore
       jpGeoJson.features[Math.floor(Math.random() * 46)] as d3.ExtendedFeature
     )().reverse();
 
@@ -50,7 +48,7 @@ export function useStoreLocation() {
     return new Promise<google.maps.places.PlaceResult | undefined>(
       (resolve) => {
         service.nearbySearch(
-          { location: baseLoaction, type: "convenience_store", radius },
+          { location: baseLoaction, type: placeType, radius },
           (res) => {
             if (!res || res.length == 0) {
               resolve(undefined);
@@ -92,6 +90,11 @@ export function useStoreLocation() {
     );
   };
 
+  const refresh = () => {
+    setStoreLocation(undefined);
+    generateBaseLocation();
+  };
+
   useEffect(() => {
     if (!storeLocation && !baseLoaction) {
       generateBaseLocation();
@@ -102,7 +105,12 @@ export function useStoreLocation() {
     }
   }, [baseLoaction, storeLocation]);
 
+  useEffect(() => {
+    refresh();
+  }, [placeType]);
+
   return {
     location: storeLocation,
+    refresh,
   };
 }
