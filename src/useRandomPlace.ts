@@ -50,12 +50,14 @@ export function useRandomPlace(placeType: PlaceType) {
         service.nearbySearch(
           { location: baseLoaction, type: placeType, radius },
           (res) => {
-            if (!res || res.length == 0) {
+            if (!res || res.length === 0) {
               resolve(undefined);
               return;
             }
 
-            resolve(res[0]);
+            const randomIndex = Math.floor(Math.random() * (res.length - 1));
+
+            resolve(res[randomIndex]);
           }
         );
       }
