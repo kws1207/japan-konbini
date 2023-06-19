@@ -12,7 +12,11 @@ function App() {
         <h1 className="font-semibold text-[24px]">Random Places in Japan</h1>
         <div className="flex flex-row items-center justify-start gap-[16px]">
           {Object.entries(PLACE_LABEL).map(([key, label]) => (
-            <button key={key} onClick={() => setPlaceType(key as PlaceType)}>
+            <button
+              key={key}
+              className={key === placeType ? "text-green-500" : "text-white"}
+              onClick={() => setPlaceType(key as PlaceType)}
+            >
               {label}
             </button>
           ))}
