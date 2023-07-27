@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { map } from "./StreetView";
 import * as d3 from "d3";
 import jpGeoJson from "./assets/japan.json";
 import { PlaceType, Location } from "./type";
+import { useAtomValue } from "jotai";
+import { mapAtom } from "./atoms";
 
 // https://observablehq.com/@jeffreymorganio/random-coordinates-within-a-country
 function randomBoundingBoxCoordinates(boundingBox: number[][]) {
@@ -27,6 +28,7 @@ function randomFeatureCoordinates(feature: d3.ExtendedFeature) {
 }
 
 export function useRandomPlace(placeType: PlaceType) {
+  const map = useAtomValue(mapAtom);
   const [baseLoaction, setBaseLocation] = useState<Location | undefined>();
   const [storeLocation, setStoreLocation] = useState<Location | undefined>();
 
@@ -41,7 +43,7 @@ export function useRandomPlace(placeType: PlaceType) {
   };
 
   const searchNearBy = (radius: number) => {
-    if (!baseLoaction) return undefined;
+    if (!baseLoaction || !map) return undefined;
 
     const service = new google.maps.places.PlacesService(map);
 

@@ -1,9 +1,8 @@
+import { useSetAtom } from "jotai";
 import { PlaceType } from "./type";
 import { useRandomPlace } from "./useRandomPlace";
 import { ComponentProps, useEffect, useRef, useState } from "react";
-
-// eslint-disable-next-line no-var, react-refresh/only-export-components
-export var map: google.maps.Map;
+import { mapAtom } from "./atoms";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -12,8 +11,14 @@ function sleep(ms: number) {
 export function StreetView({
   placeType,
   count,
+  setIsLoading,
   ...props
-}: { placeType: PlaceType; count: number } & ComponentProps<"div">) {
+}: {
+  placeType: PlaceType;
+  count: number;
+  setIsLoading: (_: boolean) => void;
+} & ComponentProps<"div">) {
+  const setMap = useSetAtom(mapAtom);
   const { location, refresh } = useRandomPlace(placeType);
 
   const [panorama, setPanorama] = useState<
@@ -36,6 +41,7 @@ export function StreetView({
         fullscreenControl: false,
       })
     );
+    setIsLoading(false);
   }, [location, placeType]);
 
   const asyncJob = async () => {
@@ -61,13 +67,14 @@ export function StreetView({
 
   useEffect(() => {
     if (count > 0) {
+      setIsLoading(true);
       refresh();
     }
-  }, [count]);
+  }, [count, placeType]);
 
   useEffect(() => {
     if (mapRef.current) {
-      map = new google.maps.Map(mapRef.current);
+      setMap(new google.maps.Map(mapRef.current));
     }
   }, []);
 
