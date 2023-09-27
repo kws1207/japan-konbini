@@ -27,7 +27,7 @@ function randomFeatureCoordinates(feature: d3.ExtendedFeature) {
   };
 }
 
-export function useRandomPlace(placeType: PlaceType) {
+export function useRandomPlace(placeType: PlaceType, index: number) {
   const map = useAtomValue(mapAtom);
   const [baseLoaction, setBaseLocation] = useState<Location | undefined>();
   const [storeLocation, setStoreLocation] = useState<Location | undefined>();
@@ -36,7 +36,9 @@ export function useRandomPlace(placeType: PlaceType) {
     const [lat, lng] = randomFeatureCoordinates(
       // eslint-disable-next-line
       // @ts-ignore
-      jpGeoJson.features[Math.floor(Math.random() * 46)] as d3.ExtendedFeature
+      jpGeoJson.features[
+        index !== -1 ? index : Math.floor(Math.random() * 46)
+      ] as d3.ExtendedFeature
     )().reverse();
 
     setBaseLocation({ lat, lng });
@@ -111,7 +113,7 @@ export function useRandomPlace(placeType: PlaceType) {
 
   useEffect(() => {
     refresh();
-  }, [placeType]);
+  }, [placeType, index]);
 
   return {
     location: storeLocation,

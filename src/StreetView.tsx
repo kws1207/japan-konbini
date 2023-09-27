@@ -12,14 +12,16 @@ export function StreetView({
   placeType,
   count,
   setIsLoading,
+  index,
   ...props
 }: {
   placeType: PlaceType;
   count: number;
   setIsLoading: (_: boolean) => void;
+  index: number;
 } & ComponentProps<"div">) {
   const setMap = useSetAtom(mapAtom);
-  const { location, refresh } = useRandomPlace(placeType);
+  const { location, refresh } = useRandomPlace(placeType, index);
 
   const [panorama, setPanorama] = useState<
     google.maps.StreetViewPanorama | undefined
