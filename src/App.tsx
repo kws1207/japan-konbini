@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { StreetView } from "./StreetView";
 import { PLACE_LABEL, PlaceType } from "./type";
-import jpGeoJson from "./assets/japan.json";
+import jpGeoJson from "./asset/japan.json";
 
 const jpGeoJsonAny = jpGeoJson as any;
 

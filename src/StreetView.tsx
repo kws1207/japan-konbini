@@ -1,8 +1,9 @@
+import { ComponentProps, useEffect, useRef, useState } from "react";
 import { useSetAtom } from "jotai";
 import { PlaceType } from "./type";
 import { useRandomPlace } from "./useRandomPlace";
-import { ComponentProps, useEffect, useRef, useState } from "react";
-import { mapAtom } from "./atoms";
+import { mapAtom } from "./atom";
+import requestIdleCallbackSafari from "./util/requestIdleCallbackSafari";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -44,7 +45,12 @@ export function StreetView({
   };
 
   useEffect(() => {
-    window.requestIdleCallback(onIdle);
+    if (window.requestIdleCallback) {
+      window.requestIdleCallback(onIdle);
+    } else {
+      // Safari & iOS
+      requestIdleCallbackSafari().request(onIdle);
+    }
   }, []);
 
   useEffect(() => {

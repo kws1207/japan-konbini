@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import * as d3 from "d3";
-import jpGeoJson from "./assets/japan.json";
+import jpGeoJson from "./asset/japan.json";
 import { PlaceType, Location } from "./type";
 import { useAtomValue } from "jotai";
-import { mapAtom } from "./atoms";
+import { mapAtom } from "./atom";
 
 // https://observablehq.com/@jeffreymorganio/random-coordinates-within-a-country
 function randomBoundingBoxCoordinates(boundingBox: number[][]) {
