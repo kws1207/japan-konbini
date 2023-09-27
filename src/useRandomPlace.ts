@@ -107,7 +107,7 @@ export function useRandomPlace(placeType: PlaceType) {
     if (baseLoaction && !storeLocation) {
       asyncJob();
     }
-  }, [baseLoaction, storeLocation]);
+  }, [JSON.stringify(baseLoaction), JSON.stringify(storeLocation)]);
 
   useEffect(() => {
     refresh();

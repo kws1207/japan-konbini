@@ -26,23 +26,33 @@ export function StreetView({
   >();
 
   const mapRef = useRef<HTMLDivElement>(null);
+  const streetViewRef = useRef<HTMLDivElement>(null);
+
+  const onIdle = () => {
+    streetViewRef.current &&
+      setPanorama(
+        new google.maps.StreetViewPanorama(streetViewRef.current, {
+          position: location,
+          addressControlOptions: {
+            position: google.maps.ControlPosition.LEFT_CENTER,
+          },
+          fullscreenControl: false,
+        })
+      );
+  };
 
   useEffect(() => {
-    if (!location) return;
-    const el = document.getElementById("street-view");
-    if (!el) return;
+    window.requestIdleCallback(onIdle);
+  }, []);
 
-    setPanorama(
-      new google.maps.StreetViewPanorama(el, {
-        position: location,
-        addressControlOptions: {
-          position: google.maps.ControlPosition.LEFT_CENTER,
-        },
-        fullscreenControl: false,
-      })
-    );
+  useEffect(() => {
+    if (panorama && location) {
+      setIsLoading(true);
+      panorama?.setPosition(location);
+    }
+
     setIsLoading(false);
-  }, [location, placeType]);
+  }, [JSON.stringify(location), placeType]);
 
   const asyncJob = async () => {
     if (!location || !panorama) return;
@@ -63,7 +73,7 @@ export function StreetView({
 
   useEffect(() => {
     asyncJob();
-  }, [panorama]);
+  }, [JSON.stringify(panorama?.getLocation())]);
 
   useEffect(() => {
     if (count > 0) {
@@ -80,8 +90,8 @@ export function StreetView({
 
   return (
     <div {...props}>
-      <div id="map" ref={mapRef}></div>
-      <div id="street-view" className="static"></div>
+      <div ref={mapRef}></div>
+      <div ref={streetViewRef} className="static"></div>
     </div>
   );
 }
