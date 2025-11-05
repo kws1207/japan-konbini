@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import * as d3 from "d3";
 import jpGeoJson from "./asset/japan.json";
 import { PlaceType, Location } from "./type";
 import { useAtomValue } from "jotai";
 import { mapAtom } from "./atom";
+import { sleep } from "./StreetView";
 
 // https://observablehq.com/@jeffreymorganio/random-coordinates-within-a-country
 function randomBoundingBoxCoordinates(boundingBox: number[][]) {
@@ -31,110 +32,187 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
   const map = useAtomValue(mapAtom);
   const [baseLoaction, setBaseLocation] = useState<Location | undefined>();
   const [storeLocation, setStoreLocation] = useState<Location | undefined>();
+  const serviceRef = useRef<google.maps.places.PlacesService | null>(null);
+  const requestIdRef = useRef(0);
 
-  const generateBaseLocation = async () => {
-    const [lat, lng] = randomFeatureCoordinates(
-      // eslint-disable-next-line
-      // @ts-ignore
-      jpGeoJson.features[
-        index !== -1 ? index : Math.floor(Math.random() * 46)
-      ] as d3.ExtendedFeature
-    )().reverse();
+  useEffect(() => {
+    if (map) {
+      serviceRef.current = new google.maps.places.PlacesService(map);
+      return;
+    }
 
-    setBaseLocation({ lat, lng });
-  };
+    serviceRef.current = null;
+  }, [map]);
 
-  const searchNearBy = (radius: number) => {
-    if (!baseLoaction || !map) return undefined;
+  const generateBaseLocation = useCallback(
+    async (requestId = requestIdRef.current) => {
+      const [lat, lng] = randomFeatureCoordinates(
+        // eslint-disable-next-line
+        // @ts-ignore
+        jpGeoJson.features[
+          index !== -1 ? index : Math.floor(Math.random() * 46)
+        ] as d3.ExtendedFeature
+      )().reverse();
 
-    const service = new google.maps.places.PlacesService(map);
+      if (requestIdRef.current !== requestId) {
+        return;
+      }
 
-    return new Promise<google.maps.places.PlaceResult | undefined>(
-      (resolve) => {
-        if (placeType === "starbucks") {
-          const textRequest: google.maps.places.TextSearchRequest = {
-            location: baseLoaction,
-            radius,
-            query: "Starbucks Coffee",
-            type: "cafe",
-          };
+      setBaseLocation({ lat, lng });
+    },
+    [index]
+  );
 
-          service.textSearch(textRequest, (res) => {
-            if (!res || res.length === 0) {
+  const searchNearBy = useCallback(
+    (radius: number, requestId: number) => {
+      if (
+        requestIdRef.current !== requestId ||
+        !baseLoaction ||
+        !serviceRef.current
+      ) {
+        return Promise.resolve(undefined);
+      }
+
+      const service = serviceRef.current;
+
+      return new Promise<google.maps.places.PlaceResult | undefined>(
+        (resolve) => {
+          const handleResult = (
+            res: google.maps.places.PlaceResult[] | null,
+            status: google.maps.places.PlacesServiceStatus
+          ) => {
+            if (requestIdRef.current !== requestId) {
               resolve(undefined);
               return;
             }
 
-            const randomIndex = Math.floor(Math.random() * (res.length - 1));
+            if (
+              status !== google.maps.places.PlacesServiceStatus.OK ||
+              !res ||
+              res.length === 0
+            ) {
+              resolve(undefined);
+              return;
+            }
+
+            const randomIndex = Math.floor(Math.random() * res.length);
 
             resolve(res[randomIndex]);
-          });
-        } else {
+          };
+
+          if (placeType === "starbucks") {
+            const textRequest: google.maps.places.TextSearchRequest = {
+              location: baseLoaction,
+              radius,
+              query: "Starbucks Coffee",
+              type: "cafe",
+            };
+
+            service.textSearch(textRequest, handleResult);
+            return;
+          }
+
           const request: google.maps.places.PlaceSearchRequest = {
             location: baseLoaction,
             radius,
             type: placeType,
           };
 
-          service.nearbySearch(request, (res) => {
-            if (!res || res.length === 0) {
-              resolve(undefined);
-              return;
-            }
-
-            const randomIndex = Math.floor(Math.random() * (res.length - 1));
-
-            resolve(res[randomIndex]);
+          service.nearbySearch(request, (res, status) => {
+            handleResult(res, status);
           });
         }
+      );
+    },
+    [baseLoaction, placeType]
+  );
+
+  const searchStore = useCallback(
+    async (requestId: number) => {
+      const radii = [50, 500, 5000];
+
+      for (const radius of radii) {
+        if (requestIdRef.current !== requestId) {
+          return undefined;
+        }
+
+        const result = await searchNearBy(radius, requestId);
+        if (requestIdRef.current !== requestId) {
+          return undefined;
+        }
+
+        if (result) {
+          return result;
+        }
+
+        await sleep(1000);
       }
-    );
-  };
 
-  const searchStore = async () => {
-    const radii = [500, 5000, 50000];
+      return undefined;
+    },
+    [searchNearBy]
+  );
 
-    for (const radius of radii) {
-      const result = await searchNearBy(radius);
-      if (result) {
-        return result;
-      }
-    }
-
-    return undefined;
-  };
-
-  const asyncJob = async () => {
-    const newStore = await searchStore();
-
-    const newStoreLocation = newStore?.geometry?.location;
-
-    setStoreLocation(
-      newStoreLocation && {
-        lat: newStoreLocation.lat(),
-        lng: newStoreLocation.lng(),
-      }
-    );
-  };
-
-  const refresh = () => {
+  const refresh = useCallback(() => {
+    requestIdRef.current += 1;
     setStoreLocation(undefined);
-    generateBaseLocation();
-  };
+    setBaseLocation(undefined);
+    generateBaseLocation(requestIdRef.current);
+  }, [generateBaseLocation]);
+
+  const asyncJob = useCallback(
+    async (requestId: number) => {
+      const maxAttempts = 3;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        if (requestIdRef.current !== requestId) {
+          return;
+        }
+
+        const newStore = await searchStore(requestId);
+
+        if (requestIdRef.current !== requestId) {
+          return;
+        }
+
+        const newStoreLocation = newStore?.geometry?.location;
+
+        if (newStoreLocation) {
+          setStoreLocation({
+            lat: newStoreLocation.lat(),
+            lng: newStoreLocation.lng(),
+          });
+          return;
+        }
+
+        await sleep(1000);
+      }
+
+      if (requestIdRef.current !== requestId) {
+        return;
+      }
+
+      refresh();
+    },
+    [refresh, searchStore]
+  );
 
   useEffect(() => {
     if (!storeLocation && !baseLoaction) {
-      generateBaseLocation();
+      generateBaseLocation(requestIdRef.current);
     }
+  }, [baseLoaction, storeLocation, generateBaseLocation]);
 
+  useEffect(() => {
     if (baseLoaction && !storeLocation) {
-      asyncJob();
+      const currentRequestId = requestIdRef.current;
+      asyncJob(currentRequestId);
     }
-  }, [JSON.stringify(baseLoaction), JSON.stringify(storeLocation)]);
+  }, [asyncJob, baseLoaction, storeLocation]);
 
   useEffect(() => {
     refresh();
-  }, [placeType, index]);
+  }, [placeType, index, refresh]);
 
   return {
     location: storeLocation,
