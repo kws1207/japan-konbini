@@ -51,36 +51,43 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
 
     return new Promise<google.maps.places.PlaceResult | undefined>(
       (resolve) => {
-        service.nearbySearch(
-          { location: baseLoaction, type: placeType, radius },
-          (res) => {
-            if (!res || res.length === 0) {
-              resolve(undefined);
-              return;
-            }
+        const request: google.maps.places.PlaceSearchRequest = {
+          location: baseLoaction,
+          radius,
+        };
 
-            const randomIndex = Math.floor(Math.random() * (res.length - 1));
+        if (placeType === "starbucks") {
+          request.type = "cafe";
+          request.keyword = "Starbucks";
+        } else {
+          request.type = placeType;
+        }
 
-            resolve(res[randomIndex]);
+        service.nearbySearch(request, (res) => {
+          if (!res || res.length === 0) {
+            resolve(undefined);
+            return;
           }
-        );
+
+          const randomIndex = Math.floor(Math.random() * (res.length - 1));
+
+          resolve(res[randomIndex]);
+        });
       }
     );
   };
 
   const searchStore = async () => {
-    const a = await searchNearBy(500);
-    if (a) {
-      return a;
+    const radii = [500, 5000, 50000];
+
+    for (const radius of radii) {
+      const result = await searchNearBy(radius);
+      if (result) {
+        return result;
+      }
     }
-    const b = await searchNearBy(5000);
-    if (b) {
-      return b;
-    }
-    const c = await searchNearBy(50000);
-    if (c) {
-      return c;
-    }
+
+    return undefined;
   };
 
   const asyncJob = async () => {
