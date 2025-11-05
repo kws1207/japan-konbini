@@ -51,28 +51,42 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
 
     return new Promise<google.maps.places.PlaceResult | undefined>(
       (resolve) => {
-        const request: google.maps.places.PlaceSearchRequest = {
-          location: baseLoaction,
-          radius,
-        };
-
         if (placeType === "starbucks") {
-          request.type = "cafe";
-          request.keyword = "Starbucks";
+          const textRequest: google.maps.places.TextSearchRequest = {
+            location: baseLoaction,
+            radius,
+            query: "Starbucks Coffee",
+            type: "cafe",
+          };
+
+          service.textSearch(textRequest, (res) => {
+            if (!res || res.length === 0) {
+              resolve(undefined);
+              return;
+            }
+
+            const randomIndex = Math.floor(Math.random() * (res.length - 1));
+
+            resolve(res[randomIndex]);
+          });
         } else {
-          request.type = placeType;
+          const request: google.maps.places.PlaceSearchRequest = {
+            location: baseLoaction,
+            radius,
+            type: placeType,
+          };
+
+          service.nearbySearch(request, (res) => {
+            if (!res || res.length === 0) {
+              resolve(undefined);
+              return;
+            }
+
+            const randomIndex = Math.floor(Math.random() * (res.length - 1));
+
+            resolve(res[randomIndex]);
+          });
         }
-
-        service.nearbySearch(request, (res) => {
-          if (!res || res.length === 0) {
-            resolve(undefined);
-            return;
-          }
-
-          const randomIndex = Math.floor(Math.random() * (res.length - 1));
-
-          resolve(res[randomIndex]);
-        });
       }
     );
   };
