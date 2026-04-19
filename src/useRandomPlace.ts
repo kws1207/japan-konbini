@@ -50,7 +50,9 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
         // eslint-disable-next-line
         // @ts-ignore
         jpGeoJson.features[
-          index !== -1 ? index : Math.floor(Math.random() * 46)
+          index !== -1
+            ? index
+            : Math.floor(Math.random() * jpGeoJson.features.length)
         ] as d3.ExtendedFeature
       )().reverse();
 
