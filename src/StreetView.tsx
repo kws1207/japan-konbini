@@ -1,6 +1,5 @@
 import { ComponentProps, useEffect, useRef, useState } from "react";
-import { PlaceType } from "./type";
-import { useRandomPlace } from "./useRandomPlace";
+import { Location } from "./type";
 import requestIdleCallbackSafari from "./util/requestIdleCallbackSafari";
 
 export function sleep(ms: number) {
@@ -8,19 +7,11 @@ export function sleep(ms: number) {
 }
 
 export function StreetView({
-  placeType,
-  count,
-  setIsLoading,
-  index,
+  location,
   ...props
 }: {
-  placeType: PlaceType;
-  count: number;
-  setIsLoading: (_: boolean) => void;
-  index: number;
+  location: Location | undefined;
 } & ComponentProps<"div">) {
-  const { location, refresh } = useRandomPlace(placeType, index);
-
   const [panorama, setPanorama] = useState<
     google.maps.StreetViewPanorama | undefined
   >();
@@ -51,40 +42,29 @@ export function StreetView({
 
   useEffect(() => {
     if (panorama && location) {
-      setIsLoading(true);
-      panorama?.setPosition(location);
+      panorama.setPosition(location);
     }
-
-    setIsLoading(false);
-  }, [JSON.stringify(location), placeType]);
-
-  const asyncJob = async () => {
-    if (!location || !panorama) return;
-
-    await sleep(1000);
-
-    const panoPos = panorama.getLocation();
-
-    if (panoPos && panoPos.latLng) {
-      const heading = google.maps.geometry.spherical.computeHeading(
-        panoPos.latLng,
-        location
-      );
-
-      panorama.setPov({ heading, pitch: 0 });
-    }
-  };
+  }, [location?.lat, location?.lng, panorama]);
 
   useEffect(() => {
-    asyncJob();
-  }, [JSON.stringify(panorama?.getLocation())]);
+    const run = async () => {
+      if (!location || !panorama) return;
 
-  useEffect(() => {
-    if (count > 0) {
-      setIsLoading(true);
-      refresh();
-    }
-  }, [count, placeType]);
+      await sleep(1000);
+
+      const panoPos = panorama.getLocation();
+
+      if (panoPos && panoPos.latLng) {
+        const heading = google.maps.geometry.spherical.computeHeading(
+          panoPos.latLng,
+          location
+        );
+
+        panorama.setPov({ heading, pitch: 0 });
+      }
+    };
+    run();
+  }, [location?.lat, location?.lng, panorama]);
 
   return (
     <div {...props}>

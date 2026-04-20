@@ -220,6 +220,7 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
 
   return {
     location: storeLocation,
+    isLoading: !storeLocation,
     refresh,
   };
 }
