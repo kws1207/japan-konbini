@@ -1,8 +1,6 @@
 import { ComponentProps, useEffect, useRef, useState } from "react";
-import { useSetAtom } from "jotai";
 import { PlaceType } from "./type";
 import { useRandomPlace } from "./useRandomPlace";
-import { mapAtom } from "./atom";
 import requestIdleCallbackSafari from "./util/requestIdleCallbackSafari";
 
 export function sleep(ms: number) {
@@ -21,14 +19,12 @@ export function StreetView({
   setIsLoading: (_: boolean) => void;
   index: number;
 } & ComponentProps<"div">) {
-  const setMap = useSetAtom(mapAtom);
   const { location, refresh } = useRandomPlace(placeType, index);
 
   const [panorama, setPanorama] = useState<
     google.maps.StreetViewPanorama | undefined
   >();
 
-  const mapRef = useRef<HTMLDivElement>(null);
   const streetViewRef = useRef<HTMLDivElement>(null);
 
   const onIdle = () => {
@@ -90,15 +86,8 @@ export function StreetView({
     }
   }, [count, placeType]);
 
-  useEffect(() => {
-    if (mapRef.current) {
-      setMap(new google.maps.Map(mapRef.current));
-    }
-  }, []);
-
   return (
     <div {...props}>
-      <div ref={mapRef}></div>
       <div ref={streetViewRef} className="static"></div>
     </div>
   );
