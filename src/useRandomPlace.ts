@@ -4,6 +4,20 @@ import { PlaceType, Location } from "./type";
 import { sleep } from "./util/sleep";
 import { useJapanGeoJson } from "./useJapanGeoJson";
 
+const SEARCH_RADIUS_METERS = 5000;
+const MAX_BASE_LOCATION_ATTEMPTS = 8;
+const RETRYABLE_STATUS_DELAY_MS = 250;
+const MAX_RETRYABLE_STATUS_RETRIES = 1;
+
+type PlacesStatus = google.maps.places.PlacesServiceStatus | string;
+
+type PlaceSearchOutcome =
+  | { type: "found"; place: google.maps.places.PlaceResult }
+  | { type: "empty"; status: PlacesStatus }
+  | { type: "retryable"; status: PlacesStatus }
+  | { type: "fatal"; status: PlacesStatus }
+  | { type: "stale" };
+
 // https://observablehq.com/@jeffreymorganio/random-coordinates-within-a-country
 function randomBoundingBoxCoordinates(boundingBox: number[][]) {
   const randomLongitude = d3.randomUniform(
@@ -28,8 +42,9 @@ function randomFeatureCoordinates(feature: d3.ExtendedFeature) {
 
 export function useRandomPlace(placeType: PlaceType, index: number) {
   const { data: jpGeoJson } = useJapanGeoJson();
-  const [baseLoaction, setBaseLocation] = useState<Location | undefined>();
   const [storeLocation, setStoreLocation] = useState<Location | undefined>();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isServiceReady, setIsServiceReady] = useState(false);
   const serviceRef = useRef<google.maps.places.PlacesService | null>(null);
   const requestIdRef = useRef(0);
 
@@ -40,6 +55,7 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
       if (typeof google !== "undefined" && google.maps?.places) {
         const container = document.createElement("div");
         serviceRef.current = new google.maps.places.PlacesService(container);
+        setIsServiceReady(true);
         return;
       }
       setTimeout(tryInit, 100);
@@ -48,183 +64,196 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
     return () => {
       cancelled = true;
       serviceRef.current = null;
+      setIsServiceReady(false);
     };
   }, []);
 
-  const generateBaseLocation = useCallback(
-    async (requestId = requestIdRef.current) => {
-      if (!jpGeoJson) return;
+  const generateBaseLocation = useCallback(() => {
+    if (!jpGeoJson) return undefined;
 
-      const feature =
-        jpGeoJson.features[
-          index !== -1
-            ? index
-            : Math.floor(Math.random() * jpGeoJson.features.length)
-        ];
+    const feature =
+      jpGeoJson.features[
+        index !== -1 ? index : Math.floor(Math.random() * jpGeoJson.features.length)
+      ];
 
-      const [lat, lng] = randomFeatureCoordinates(
-        feature as d3.ExtendedFeature
-      )().reverse();
+    const [lat, lng] = randomFeatureCoordinates(
+      feature as d3.ExtendedFeature
+    )().reverse();
 
-      if (requestIdRef.current !== requestId) {
-        return;
-      }
-
-      setBaseLocation({ lat, lng });
-    },
-    [index, jpGeoJson]
-  );
+    return { lat, lng };
+  }, [index, jpGeoJson]);
 
   const searchNearBy = useCallback(
-    (radius: number, requestId: number) => {
-      if (
-        requestIdRef.current !== requestId ||
-        !baseLoaction ||
-        !serviceRef.current
-      ) {
-        return Promise.resolve(undefined);
+    (location: Location, radius: number, requestId: number) => {
+      if (requestIdRef.current !== requestId || !serviceRef.current) {
+        return Promise.resolve<PlaceSearchOutcome>({ type: "stale" });
       }
 
       const service = serviceRef.current;
 
-      return new Promise<google.maps.places.PlaceResult | undefined>(
-        (resolve) => {
-          const handleResult = (
-            res: google.maps.places.PlaceResult[] | null,
-            status: string
-          ) => {
-            if (requestIdRef.current !== requestId) {
-              resolve(undefined);
-              return;
-            }
-
-            if (status !== "OK" || !res || res.length === 0) {
-              resolve(undefined);
-              return;
-            }
-
-            const randomIndex = Math.floor(Math.random() * res.length);
-
-            resolve(res[randomIndex]);
-          };
-
-          if (placeType === "starbucks") {
-            const textRequest: google.maps.places.TextSearchRequest = {
-              location: baseLoaction,
-              radius,
-              query: "Starbucks Coffee",
-              type: "cafe",
-            };
-
-            service.textSearch(textRequest, handleResult);
+      return new Promise<PlaceSearchOutcome>((resolve) => {
+        const handleResult = (
+          res: google.maps.places.PlaceResult[] | null,
+          status: PlacesStatus
+        ) => {
+          if (requestIdRef.current !== requestId) {
+            resolve({ type: "stale" });
             return;
           }
 
-          const request: google.maps.places.PlaceSearchRequest = {
-            location: baseLoaction,
+          if (status === "OK" && res && res.length > 0) {
+            const randomIndex = Math.floor(Math.random() * res.length);
+            resolve({ type: "found", place: res[randomIndex] });
+            return;
+          }
+
+          if (status === "OK" || status === "ZERO_RESULTS") {
+            resolve({ type: "empty", status });
+            return;
+          }
+
+          if (status === "UNKNOWN_ERROR") {
+            resolve({ type: "retryable", status });
+            return;
+          }
+
+          resolve({ type: "fatal", status });
+        };
+
+        if (placeType === "starbucks") {
+          const textRequest: google.maps.places.TextSearchRequest = {
+            location,
             radius,
-            type: placeType,
+            query: "Starbucks Coffee",
+            type: "cafe",
           };
 
-          service.nearbySearch(request, (res, status) => {
-            handleResult(res, status);
-          });
+          service.textSearch(textRequest, handleResult);
+          return;
         }
-      );
+
+        const request: google.maps.places.PlaceSearchRequest = {
+          location,
+          radius,
+          type: placeType,
+        };
+
+        service.nearbySearch(request, (res, status) => {
+          handleResult(res, status);
+        });
+      });
     },
-    [baseLoaction, placeType]
+    [placeType]
   );
 
   const searchStore = useCallback(
-    async (requestId: number) => {
-      const radii = [50, 500, 5000];
-
-      for (const radius of radii) {
+    async (
+      baseLocation: Location,
+      requestId: number
+    ): Promise<PlaceSearchOutcome> => {
+      for (
+        let retry = 0;
+        retry <= MAX_RETRYABLE_STATUS_RETRIES;
+        retry += 1
+      ) {
         if (requestIdRef.current !== requestId) {
-          return undefined;
+          return { type: "stale" };
         }
 
-        const result = await searchNearBy(radius, requestId);
+        const result = await searchNearBy(
+          baseLocation,
+          SEARCH_RADIUS_METERS,
+          requestId
+        );
+
         if (requestIdRef.current !== requestId) {
-          return undefined;
+          return { type: "stale" };
         }
 
-        if (result) {
+        if (result.type !== "retryable") {
           return result;
         }
 
-        await sleep(1000);
+        if (retry < MAX_RETRYABLE_STATUS_RETRIES) {
+          await sleep(RETRYABLE_STATUS_DELAY_MS);
+        }
       }
 
-      return undefined;
+      return { type: "retryable", status: "UNKNOWN_ERROR" };
     },
     [searchNearBy]
   );
 
-  const refresh = useCallback(() => {
-    requestIdRef.current += 1;
-    setStoreLocation(undefined);
-    setBaseLocation(undefined);
-    generateBaseLocation(requestIdRef.current);
-  }, [generateBaseLocation]);
-
-  const asyncJob = useCallback(
+  const runSearch = useCallback(
     async (requestId: number) => {
-      const maxAttempts = 3;
+      setIsLoading(true);
 
-      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (!jpGeoJson || !isServiceReady) {
+        return;
+      }
+
+      for (let attempt = 0; attempt < MAX_BASE_LOCATION_ATTEMPTS; attempt += 1) {
         if (requestIdRef.current !== requestId) {
           return;
         }
 
-        const newStore = await searchStore(requestId);
+        const baseLocation = generateBaseLocation();
+        if (!baseLocation) {
+          setIsLoading(false);
+          return;
+        }
+
+        const result = await searchStore(baseLocation, requestId);
 
         if (requestIdRef.current !== requestId) {
           return;
         }
 
-        const newStoreLocation = newStore?.geometry?.location;
+        if (result.type === "stale") {
+          return;
+        }
 
-        if (newStoreLocation) {
+        if (result.type === "fatal") {
+          setIsLoading(false);
+          return;
+        }
+
+        if (result.type === "found") {
+          const newStoreLocation = result.place.geometry?.location;
+          if (!newStoreLocation) {
+            continue;
+          }
           setStoreLocation({
             lat: newStoreLocation.lat(),
             lng: newStoreLocation.lng(),
           });
+          setIsLoading(false);
           return;
         }
-
-        await sleep(1000);
       }
 
       if (requestIdRef.current !== requestId) {
         return;
       }
 
-      refresh();
+      setIsLoading(false);
     },
-    [refresh, searchStore]
+    [generateBaseLocation, isServiceReady, jpGeoJson, searchStore]
   );
 
-  useEffect(() => {
-    if (!storeLocation && !baseLoaction) {
-      generateBaseLocation(requestIdRef.current);
-    }
-  }, [baseLoaction, storeLocation, generateBaseLocation]);
+  const refresh = useCallback(() => {
+    requestIdRef.current += 1;
+    void runSearch(requestIdRef.current);
+  }, [runSearch]);
 
   useEffect(() => {
-    if (baseLoaction && !storeLocation) {
-      const currentRequestId = requestIdRef.current;
-      asyncJob(currentRequestId);
-    }
-  }, [asyncJob, baseLoaction, storeLocation]);
-
-  useEffect(() => {
-    refresh();
-  }, [placeType, index, refresh]);
+    requestIdRef.current += 1;
+    void runSearch(requestIdRef.current);
+  }, [runSearch]);
 
   return {
     location: storeLocation,
-    isLoading: !storeLocation,
+    isLoading,
     refresh,
   };
 }
