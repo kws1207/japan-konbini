@@ -31,8 +31,9 @@
 
 - **Google Maps API는 `index.html:45`의 `<script>` 태그로 전역 로드된다.** 앱은 `google.maps.*` 전역을 직접 쓴다. `@react-google-maps/api`가 `package.json`에 있지만 실제로는 사용하지 않는다 — 로더로 감싸지 말고 지금 방식을 유지하거나, 바꿀 거면 의존성 제거까지 한 번에 하라.
 - **API 키는 `index.html`에 하드코딩**되어 있고 `randomplacesjapan.netlify.app` 도메인 제한으로 보호된다. 로컬에서 404/Referer 에러가 나면 키가 아니라 도메인 제한 설정을 확인하라.
-- **`mapAtom` (`src/atom.ts`)의 존재 이유**: `StreetView`가 생성한 `google.maps.Map` 인스턴스를 `useRandomPlace`의 `PlacesService` 생성자에 넘기기 위함. 이 atom을 제거하려면 인스턴스 전달 경로를 먼저 설계하라.
-- **Google Maps 스크립트 로딩이 비동기라 앱 마운트 시 `google` 전역이 없을 수 있다.** `StreetView.tsx`는 `requestIdleCallback` (+ Safari 폴리필 `src/util/requestIdleCallbackSafari.js`) 로 초기화를 미룬다. 이 순서 의존성을 깨지 말 것.
+- **`PlacesService`는 DOM에 부착하지 않은 `document.createElement("div")` 로 생성한다** (`useRandomPlace.ts`). 과거에는 `StreetView`가 만든 `google.maps.Map` 인스턴스를 `mapAtom`으로 공유했지만 — Dynamic Map 과금 유발 — 생성자 시그니처가 `HTMLDivElement | Map` 이라 div만으로 충분하다. jotai / `src/atom.ts` 는 제거됨. 다시 Map 인스턴스를 넘기는 방향으로 되돌리지 말 것.
+- **Google Maps 스크립트 로딩이 비동기라 앱 마운트 시 `google` 전역이 없을 수 있다.** `StreetView.tsx`는 `requestIdleCallback` (+ Safari 폴리필 `src/util/requestIdleCallbackSafari.js`) 로 초기화를 미루고, `useRandomPlace`는 `typeof google !== "undefined" && google.maps?.places` 가드 + `setTimeout` 폴링으로 `PlacesService` 생성을 지연한다. 두 순서 의존성을 깨지 말 것.
+- **`isLoading` / `location` 소유권은 `useRandomPlace` 훅에 있다.** `App`이 훅을 호출해서 Go! 버튼과 `<StreetView location={...} />`로 분배한다. `StreetView`는 더 이상 훅을 호출하지 않으며, 로딩 상태를 prop으로 받지 않는다 — 이 단방향 흐름을 유지하라.
 
 ## 도메인 상수
 
@@ -43,9 +44,7 @@
 
 ## 현존 기술부채 (건드릴 때 주의)
 
-- `useRandomPlace.ts:52` — GeoJSON feature 접근에 `@ts-ignore`. 47개 prefecture인데 `Math.floor(Math.random() * 46)` 로 index 한 개가 빠지는 버그 존재.
-- `App.tsx:6` — `jpGeoJson as any`. 타입 캐스팅 정리 대상.
+- `useRandomPlace.ts` — GeoJSON feature 접근에 `@ts-ignore` 가 아직 남아있다. `d3.ExtendedFeature` 로 좁히면 제거 가능.
+- `App.tsx` — `jpGeoJson as any` 캐스팅 (`jpGeoJsonAny` 상수) 이 남아있다. GeoJSON 타입을 제대로 좁히면 제거 가능.
 - `useRandomPlace.ts` 전반에 `baseLoaction` 오타. 리네임 시 전수 치환.
-- `StreetView.tsx:63` — `setIsLoading(false)` 가 `setPosition` 직후 동기적으로 실행되어 즉시 false로 돌아간다 (로딩 UI가 동작하지 않음).
-- `StreetView.tsx:48` — `onIdle`이 `location`이 undefined인 상태로 `new StreetViewPanorama(...)` 를 호출할 수 있다.
-- `useEffect` deps에 `JSON.stringify(location)` 을 쓰는 패턴이 몇 군데 있다 — 정규 dep으로 정리 가능하면 그쪽을 택하라.
+- `StreetView.tsx` — `onIdle`이 `location`이 undefined인 상태로 `new StreetViewPanorama(...)` 를 호출할 수 있다 (초기 mount 한정, 이후 effect가 `setPosition` 으로 보정).
