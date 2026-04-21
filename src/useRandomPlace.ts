@@ -2,9 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import * as d3 from "d3";
 import jpGeoJson from "./asset/japan.json";
 import { PlaceType, Location } from "./type";
-import { useAtomValue } from "jotai";
-import { mapAtom } from "./atom";
-import { sleep } from "./StreetView";
+import { sleep } from "./util/sleep";
 
 // https://observablehq.com/@jeffreymorganio/random-coordinates-within-a-country
 function randomBoundingBoxCoordinates(boundingBox: number[][]) {
@@ -29,20 +27,28 @@ function randomFeatureCoordinates(feature: d3.ExtendedFeature) {
 }
 
 export function useRandomPlace(placeType: PlaceType, index: number) {
-  const map = useAtomValue(mapAtom);
   const [baseLoaction, setBaseLocation] = useState<Location | undefined>();
   const [storeLocation, setStoreLocation] = useState<Location | undefined>();
   const serviceRef = useRef<google.maps.places.PlacesService | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
-    if (map) {
-      serviceRef.current = new google.maps.places.PlacesService(map);
-      return;
-    }
-
-    serviceRef.current = null;
-  }, [map]);
+    let cancelled = false;
+    const tryInit = () => {
+      if (cancelled) return;
+      if (typeof google !== "undefined" && google.maps?.places) {
+        const container = document.createElement("div");
+        serviceRef.current = new google.maps.places.PlacesService(container);
+        return;
+      }
+      setTimeout(tryInit, 100);
+    };
+    tryInit();
+    return () => {
+      cancelled = true;
+      serviceRef.current = null;
+    };
+  }, []);
 
   const generateBaseLocation = useCallback(
     async (requestId = requestIdRef.current) => {
@@ -50,7 +56,9 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
         // eslint-disable-next-line
         // @ts-ignore
         jpGeoJson.features[
-          index !== -1 ? index : Math.floor(Math.random() * 46)
+          index !== -1
+            ? index
+            : Math.floor(Math.random() * jpGeoJson.features.length)
         ] as d3.ExtendedFeature
       )().reverse();
 
@@ -79,18 +87,14 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
         (resolve) => {
           const handleResult = (
             res: google.maps.places.PlaceResult[] | null,
-            status: google.maps.places.PlacesServiceStatus
+            status: string
           ) => {
             if (requestIdRef.current !== requestId) {
               resolve(undefined);
               return;
             }
 
-            if (
-              status !== google.maps.places.PlacesServiceStatus.OK ||
-              !res ||
-              res.length === 0
-            ) {
+            if (status !== "OK" || !res || res.length === 0) {
               resolve(undefined);
               return;
             }
@@ -216,6 +220,7 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
 
   return {
     location: storeLocation,
+    isLoading: !storeLocation,
     refresh,
   };
 }

@@ -1,48 +1,33 @@
-import { ComponentProps, useEffect, useRef, useState } from "react";
-import { useSetAtom } from "jotai";
-import { PlaceType } from "./type";
-import { useRandomPlace } from "./useRandomPlace";
-import { mapAtom } from "./atom";
+import { ComponentProps, useCallback, useEffect, useRef, useState } from "react";
+import { Location } from "./type";
+import { sleep } from "./util/sleep";
 import requestIdleCallbackSafari from "./util/requestIdleCallbackSafari";
 
-export function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+const MAX_HEADING_ATTEMPTS = 20;
 
 export function StreetView({
-  placeType,
-  count,
-  setIsLoading,
-  index,
+  location,
   ...props
 }: {
-  placeType: PlaceType;
-  count: number;
-  setIsLoading: (_: boolean) => void;
-  index: number;
+  location: Location | undefined;
 } & ComponentProps<"div">) {
-  const setMap = useSetAtom(mapAtom);
-  const { location, refresh } = useRandomPlace(placeType, index);
-
   const [panorama, setPanorama] = useState<
     google.maps.StreetViewPanorama | undefined
   >();
 
-  const mapRef = useRef<HTMLDivElement>(null);
   const streetViewRef = useRef<HTMLDivElement>(null);
 
-  const onIdle = () => {
+  const onIdle = useCallback(() => {
     streetViewRef.current &&
       setPanorama(
         new google.maps.StreetViewPanorama(streetViewRef.current, {
-          position: location,
           addressControlOptions: {
             position: google.maps.ControlPosition.LEFT_CENTER,
           },
           fullscreenControl: false,
         })
       );
-  };
+  }, []);
 
   useEffect(() => {
     if (window.requestIdleCallback) {
@@ -51,54 +36,61 @@ export function StreetView({
       // Safari & iOS
       requestIdleCallbackSafari().request(onIdle);
     }
-  }, []);
+  }, [onIdle]);
 
   useEffect(() => {
     if (panorama && location) {
-      setIsLoading(true);
-      panorama?.setPosition(location);
+      panorama.setPosition(location);
     }
+  }, [location, panorama]);
 
-    setIsLoading(false);
-  }, [JSON.stringify(location), placeType]);
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer: number | undefined;
+    let headingAttempts = 0;
 
-  const asyncJob = async () => {
-    if (!location || !panorama) return;
+    const alignHeading = () => {
+      if (cancelled || !location || !panorama) return;
 
-    await sleep(1000);
+      const panoPos = panorama.getLocation();
 
-    const panoPos = panorama.getLocation();
+      if (!panoPos?.latLng) {
+        headingAttempts += 1;
+        if (headingAttempts < MAX_HEADING_ATTEMPTS) {
+          retryTimer = window.setTimeout(alignHeading, 100);
+        }
+        return;
+      }
 
-    if (panoPos && panoPos.latLng) {
       const heading = google.maps.geometry.spherical.computeHeading(
         panoPos.latLng,
         location
       );
 
-      panorama.setPov({ heading, pitch: 0 });
-    }
-  };
+      if (!cancelled) {
+        panorama.setPov({ heading, pitch: 0 });
+      }
+    };
 
-  useEffect(() => {
-    asyncJob();
-  }, [JSON.stringify(panorama?.getLocation())]);
+    const run = async () => {
+      if (!location || !panorama) return;
 
-  useEffect(() => {
-    if (count > 0) {
-      setIsLoading(true);
-      refresh();
-    }
-  }, [count, placeType]);
+      await sleep(1000);
 
-  useEffect(() => {
-    if (mapRef.current) {
-      setMap(new google.maps.Map(mapRef.current));
-    }
-  }, []);
+      if (cancelled) return;
+      alignHeading();
+    };
+    run();
+    return () => {
+      cancelled = true;
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+      }
+    };
+  }, [location, panorama]);
 
   return (
     <div {...props}>
-      <div ref={mapRef}></div>
       <div ref={streetViewRef} className="static"></div>
     </div>
   );

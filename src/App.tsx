@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
 import { StreetView } from "./StreetView";
 import { PLACE_LABEL, PlaceType } from "./type";
+import { useRandomPlace } from "./useRandomPlace";
 import jpGeoJson from "./asset/japan.json";
 
-const jpGeoJsonAny = jpGeoJson as any;
+type PrefectureFeature = {
+  properties: {
+    nam: string;
+  };
+};
+
+const prefectures = jpGeoJson.features as PrefectureFeature[];
 
 function App() {
   const [placeType, setPlaceType] = useState<PlaceType>("convenience_store");
-  const [count, setCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
   const [selected, setSelected] = useState("All Prefecture");
   const [index, setIndex] = useState(-1);
 
@@ -18,11 +23,13 @@ function App() {
       return;
     }
 
-    const newIndex = (jpGeoJsonAny.features as any[]).findIndex(
+    const newIndex = prefectures.findIndex(
       ({ properties }) => properties.nam === selected
     );
     setIndex(newIndex);
   }, [selected]);
+
+  const { location, isLoading, refresh } = useRandomPlace(placeType, index);
 
   return (
     <div className="flex flex-col h-[100vh]">
@@ -50,7 +57,7 @@ function App() {
             className="text-black"
           >
             <option value="All Prefecture">All Prefecture</option>
-            {(jpGeoJsonAny.features as any[]).map(({ properties }) => (
+            {prefectures.map(({ properties }) => (
               <option value={properties.nam} key={properties.nam}>
                 {properties.nam}
               </option>
@@ -60,19 +67,14 @@ function App() {
             className={`${
               isLoading ? "bg-gray-300" : "bg-green-500"
             } rounded px-[12px] py-[2px]`}
-            onClick={() => setCount((prev) => prev + 1)}
+            onClick={refresh}
             disabled={isLoading}
           >
             {isLoading ? "Loading..." : "➡️ Go!"}
           </button>
         </div>
       </div>
-      <StreetView
-        placeType={placeType}
-        count={count}
-        setIsLoading={setIsLoading}
-        index={index}
-      />
+      <StreetView location={location} />
     </div>
   );
 }
