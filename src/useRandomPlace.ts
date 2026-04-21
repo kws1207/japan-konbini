@@ -6,6 +6,7 @@ import { useJapanGeoJson } from "./useJapanGeoJson";
 
 const SEARCH_RADIUS_METERS = 5000;
 const MAX_BASE_LOCATION_ATTEMPTS = 8;
+const MAX_SEARCH_ROUNDS = 2;
 const RETRYABLE_STATUS_DELAY_MS = 250;
 const MAX_RETRYABLE_STATUS_RETRIES = 1;
 
@@ -192,43 +193,49 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
         return;
       }
 
-      for (let attempt = 0; attempt < MAX_BASE_LOCATION_ATTEMPTS; attempt += 1) {
-        if (requestIdRef.current !== requestId) {
-          return;
-        }
-
-        const baseLocation = generateBaseLocation();
-        if (!baseLocation) {
-          setIsLoading(false);
-          return;
-        }
-
-        const result = await searchStore(baseLocation, requestId);
-
-        if (requestIdRef.current !== requestId) {
-          return;
-        }
-
-        if (result.type === "stale") {
-          return;
-        }
-
-        if (result.type === "fatal") {
-          setIsLoading(false);
-          return;
-        }
-
-        if (result.type === "found") {
-          const newStoreLocation = result.place.geometry?.location;
-          if (!newStoreLocation) {
-            continue;
+      for (let round = 0; round < MAX_SEARCH_ROUNDS; round += 1) {
+        for (
+          let attempt = 0;
+          attempt < MAX_BASE_LOCATION_ATTEMPTS;
+          attempt += 1
+        ) {
+          if (requestIdRef.current !== requestId) {
+            return;
           }
-          setStoreLocation({
-            lat: newStoreLocation.lat(),
-            lng: newStoreLocation.lng(),
-          });
-          setIsLoading(false);
-          return;
+
+          const baseLocation = generateBaseLocation();
+          if (!baseLocation) {
+            setIsLoading(false);
+            return;
+          }
+
+          const result = await searchStore(baseLocation, requestId);
+
+          if (requestIdRef.current !== requestId) {
+            return;
+          }
+
+          if (result.type === "stale") {
+            return;
+          }
+
+          if (result.type === "fatal") {
+            setIsLoading(false);
+            return;
+          }
+
+          if (result.type === "found") {
+            const newStoreLocation = result.place.geometry?.location;
+            if (!newStoreLocation) {
+              continue;
+            }
+            setStoreLocation({
+              lat: newStoreLocation.lat(),
+              lng: newStoreLocation.lng(),
+            });
+            setIsLoading(false);
+            return;
+          }
         }
       }
 
@@ -236,6 +243,7 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
         return;
       }
 
+      setStoreLocation(undefined);
       setIsLoading(false);
     },
     [generateBaseLocation, isServiceReady, jpGeoJson, searchStore]
