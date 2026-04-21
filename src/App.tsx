@@ -2,34 +2,31 @@ import { useEffect, useState } from "react";
 import { StreetView } from "./StreetView";
 import { PLACE_LABEL, PlaceType } from "./type";
 import { useRandomPlace } from "./useRandomPlace";
-import jpGeoJson from "./asset/japan.json";
-
-type PrefectureFeature = {
-  properties: {
-    nam: string;
-  };
-};
-
-const prefectures = jpGeoJson.features as PrefectureFeature[];
+import { useJapanGeoJson } from "./useJapanGeoJson";
 
 function App() {
   const [placeType, setPlaceType] = useState<PlaceType>("convenience_store");
   const [selected, setSelected] = useState("All Prefecture");
   const [index, setIndex] = useState(-1);
 
+  const { data: jpGeoJson, isLoaded } = useJapanGeoJson();
+
   useEffect(() => {
+    if (!jpGeoJson) return;
     if (selected === "All Prefecture") {
       setIndex(-1);
       return;
     }
 
-    const newIndex = prefectures.findIndex(
-      ({ properties }) => properties.nam === selected
+    const newIndex = jpGeoJson.features.findIndex(
+      (f) => f.properties?.nam === selected
     );
     setIndex(newIndex);
-  }, [selected]);
+  }, [selected, jpGeoJson]);
 
   const { location, isLoading, refresh } = useRandomPlace(placeType, index);
+
+  const disabled = !isLoaded || isLoading;
 
   return (
     <div className="flex flex-col h-[100vh]">
@@ -55,22 +52,31 @@ function App() {
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
             className="text-black"
+            disabled={!isLoaded}
           >
             <option value="All Prefecture">All Prefecture</option>
-            {prefectures.map(({ properties }) => (
-              <option value={properties.nam} key={properties.nam}>
-                {properties.nam}
-              </option>
-            ))}
+            {jpGeoJson?.features.map((f) => {
+              const name = f.properties?.nam as string | undefined;
+              if (!name) return null;
+              return (
+                <option value={name} key={name}>
+                  {name}
+                </option>
+              );
+            })}
           </select>
           <button
             className={`${
-              isLoading ? "bg-gray-300" : "bg-green-500"
+              disabled ? "bg-gray-300" : "bg-green-500"
             } rounded px-[12px] py-[2px]`}
             onClick={refresh}
-            disabled={isLoading}
+            disabled={disabled}
           >
-            {isLoading ? "Loading..." : "➡️ Go!"}
+            {!isLoaded
+              ? "Loading map data..."
+              : isLoading
+              ? "Loading..."
+              : "➡️ Go!"}
           </button>
         </div>
       </div>

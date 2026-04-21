@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as d3 from "d3";
-import jpGeoJson from "./asset/japan.json";
 import { PlaceType, Location } from "./type";
 import { sleep } from "./util/sleep";
+import { useJapanGeoJson } from "./useJapanGeoJson";
 
 // https://observablehq.com/@jeffreymorganio/random-coordinates-within-a-country
 function randomBoundingBoxCoordinates(boundingBox: number[][]) {
@@ -27,6 +27,7 @@ function randomFeatureCoordinates(feature: d3.ExtendedFeature) {
 }
 
 export function useRandomPlace(placeType: PlaceType, index: number) {
+  const { data: jpGeoJson } = useJapanGeoJson();
   const [baseLoaction, setBaseLocation] = useState<Location | undefined>();
   const [storeLocation, setStoreLocation] = useState<Location | undefined>();
   const serviceRef = useRef<google.maps.places.PlacesService | null>(null);
@@ -52,14 +53,17 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
 
   const generateBaseLocation = useCallback(
     async (requestId = requestIdRef.current) => {
-      const [lat, lng] = randomFeatureCoordinates(
-        // eslint-disable-next-line
-        // @ts-ignore
+      if (!jpGeoJson) return;
+
+      const feature =
         jpGeoJson.features[
           index !== -1
             ? index
             : Math.floor(Math.random() * jpGeoJson.features.length)
-        ] as d3.ExtendedFeature
+        ];
+
+      const [lat, lng] = randomFeatureCoordinates(
+        feature as d3.ExtendedFeature
       )().reverse();
 
       if (requestIdRef.current !== requestId) {
@@ -68,7 +72,7 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
 
       setBaseLocation({ lat, lng });
     },
-    [index]
+    [index, jpGeoJson]
   );
 
   const searchNearBy = useCallback(
