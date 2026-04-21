@@ -1,10 +1,9 @@
-import { ComponentProps, useEffect, useRef, useState } from "react";
+import { ComponentProps, useCallback, useEffect, useRef, useState } from "react";
 import { Location } from "./type";
+import { sleep } from "./util/sleep";
 import requestIdleCallbackSafari from "./util/requestIdleCallbackSafari";
 
-export function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+const MAX_HEADING_ATTEMPTS = 20;
 
 export function StreetView({
   location,
@@ -18,18 +17,17 @@ export function StreetView({
 
   const streetViewRef = useRef<HTMLDivElement>(null);
 
-  const onIdle = () => {
+  const onIdle = useCallback(() => {
     streetViewRef.current &&
       setPanorama(
         new google.maps.StreetViewPanorama(streetViewRef.current, {
-          position: location,
           addressControlOptions: {
             position: google.maps.ControlPosition.LEFT_CENTER,
           },
           fullscreenControl: false,
         })
       );
-  };
+  }, []);
 
   useEffect(() => {
     if (window.requestIdleCallback) {
@@ -38,33 +36,58 @@ export function StreetView({
       // Safari & iOS
       requestIdleCallbackSafari().request(onIdle);
     }
-  }, []);
+  }, [onIdle]);
 
   useEffect(() => {
     if (panorama && location) {
       panorama.setPosition(location);
     }
-  }, [location?.lat, location?.lng, panorama]);
+  }, [location, panorama]);
 
   useEffect(() => {
+    let cancelled = false;
+    let retryTimer: number | undefined;
+    let headingAttempts = 0;
+
+    const alignHeading = () => {
+      if (cancelled || !location || !panorama) return;
+
+      const panoPos = panorama.getLocation();
+
+      if (!panoPos?.latLng) {
+        headingAttempts += 1;
+        if (headingAttempts < MAX_HEADING_ATTEMPTS) {
+          retryTimer = window.setTimeout(alignHeading, 100);
+        }
+        return;
+      }
+
+      const heading = google.maps.geometry.spherical.computeHeading(
+        panoPos.latLng,
+        location
+      );
+
+      if (!cancelled) {
+        panorama.setPov({ heading, pitch: 0 });
+      }
+    };
+
     const run = async () => {
       if (!location || !panorama) return;
 
       await sleep(1000);
 
-      const panoPos = panorama.getLocation();
-
-      if (panoPos && panoPos.latLng) {
-        const heading = google.maps.geometry.spherical.computeHeading(
-          panoPos.latLng,
-          location
-        );
-
-        panorama.setPov({ heading, pitch: 0 });
-      }
+      if (cancelled) return;
+      alignHeading();
     };
     run();
-  }, [location?.lat, location?.lng, panorama]);
+    return () => {
+      cancelled = true;
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+      }
+    };
+  }, [location, panorama]);
 
   return (
     <div {...props}>

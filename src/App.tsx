@@ -4,7 +4,13 @@ import { PLACE_LABEL, PlaceType } from "./type";
 import { useRandomPlace } from "./useRandomPlace";
 import jpGeoJson from "./asset/japan.json";
 
-const jpGeoJsonAny = jpGeoJson as any;
+type PrefectureFeature = {
+  properties: {
+    nam: string;
+  };
+};
+
+const prefectures = jpGeoJson.features as PrefectureFeature[];
 
 function App() {
   const [placeType, setPlaceType] = useState<PlaceType>("convenience_store");
@@ -17,7 +23,7 @@ function App() {
       return;
     }
 
-    const newIndex = (jpGeoJsonAny.features as any[]).findIndex(
+    const newIndex = prefectures.findIndex(
       ({ properties }) => properties.nam === selected
     );
     setIndex(newIndex);
@@ -51,7 +57,7 @@ function App() {
             className="text-black"
           >
             <option value="All Prefecture">All Prefecture</option>
-            {(jpGeoJsonAny.features as any[]).map(({ properties }) => (
+            {prefectures.map(({ properties }) => (
               <option value={properties.nam} key={properties.nam}>
                 {properties.nam}
               </option>

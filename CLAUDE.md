@@ -45,6 +45,6 @@
 ## 현존 기술부채 (건드릴 때 주의)
 
 - `useRandomPlace.ts` — GeoJSON feature 접근에 `@ts-ignore` 가 아직 남아있다. `d3.ExtendedFeature` 로 좁히면 제거 가능.
-- `App.tsx` — `jpGeoJson as any` 캐스팅 (`jpGeoJsonAny` 상수) 이 남아있다. GeoJSON 타입을 제대로 좁히면 제거 가능.
+- `App.tsx` — GeoJSON feature 접근을 앱 전용 `PrefectureFeature` 로 좁혀두었다. 공용 GeoJSON 타입으로 정리 가능.
 - `useRandomPlace.ts` 전반에 `baseLoaction` 오타. 리네임 시 전수 치환.
-- `StreetView.tsx` — `onIdle`이 `location`이 undefined인 상태로 `new StreetViewPanorama(...)` 를 호출할 수 있다 (초기 mount 한정, 이후 effect가 `setPosition` 으로 보정).
+- `StreetView.tsx` — `StreetViewPanorama` 는 초기 위치 없이 생성하고, 이후 `location` effect가 `setPosition` / POV 보정을 담당한다.

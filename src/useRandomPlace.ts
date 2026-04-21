@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import * as d3 from "d3";
 import jpGeoJson from "./asset/japan.json";
 import { PlaceType, Location } from "./type";
-import { sleep } from "./StreetView";
+import { sleep } from "./util/sleep";
 
 // https://observablehq.com/@jeffreymorganio/random-coordinates-within-a-country
 function randomBoundingBoxCoordinates(boundingBox: number[][]) {
