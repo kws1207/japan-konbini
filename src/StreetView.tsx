@@ -39,9 +39,17 @@ export function StreetView({
   }, [onIdle]);
 
   useEffect(() => {
-    if (panorama && location) {
-      panorama.setPosition(location);
+    if (!panorama) {
+      return;
     }
+
+    if (!location) {
+      panorama.setVisible(false);
+      return;
+    }
+
+    panorama.setVisible(true);
+    panorama.setPosition(location);
   }, [location, panorama]);
 
   useEffect(() => {
