@@ -41,13 +41,24 @@ function randomFeatureCoordinates(feature: d3.ExtendedFeature) {
   };
 }
 
-export function useRandomPlace(placeType: PlaceType, index: number) {
+export function useRandomPlace(
+  placeType: PlaceType,
+  index: number,
+  initialLocation?: Location
+) {
   const { data: jpGeoJson } = useJapanGeoJson();
-  const [storeLocation, setStoreLocation] = useState<Location | undefined>();
-  const [isLoading, setIsLoading] = useState(true);
+  const [storeLocation, setStoreLocation] = useState<Location | undefined>(
+    initialLocation
+  );
+  const [isLoading, setIsLoading] = useState(!initialLocation);
   const [isServiceReady, setIsServiceReady] = useState(false);
   const serviceRef = useRef<google.maps.places.PlacesService | null>(null);
   const requestIdRef = useRef(0);
+  // Suppress the auto-search on mount when we hydrate from a shared URL.
+  // The skip is released as soon as the user changes placeType/index or
+  // triggers refresh() explicitly.
+  const skipAutoSearchRef = useRef<boolean>(initialLocation !== undefined);
+  const lastInputsRef = useRef({ placeType, index });
 
   useEffect(() => {
     let cancelled = false;
@@ -250,14 +261,28 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
   );
 
   const refresh = useCallback(() => {
+    skipAutoSearchRef.current = false;
     requestIdRef.current += 1;
     void runSearch(requestIdRef.current);
   }, [runSearch]);
 
   useEffect(() => {
+    const inputsChanged =
+      lastInputsRef.current.placeType !== placeType ||
+      lastInputsRef.current.index !== index;
+
+    if (inputsChanged) {
+      lastInputsRef.current = { placeType, index };
+      skipAutoSearchRef.current = false;
+    }
+
+    if (skipAutoSearchRef.current) {
+      return;
+    }
+
     requestIdRef.current += 1;
     void runSearch(requestIdRef.current);
-  }, [runSearch]);
+  }, [runSearch, placeType, index]);
 
   return {
     location: storeLocation,
