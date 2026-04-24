@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Feature } from "geojson";
 import { PREFECTURE_REGION } from "../util/prefectureRegions";
 import { REGIONS, Region } from "../type";
@@ -85,13 +86,14 @@ export function PrefectureCombobox({
         </span>
       </button>
 
-      {open && (
-        <div
-          className="fixed inset-0 z-[60] bg-white flex flex-col"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Choose prefecture"
-        >
+      {open &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[60] bg-white flex flex-col"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose prefecture"
+          >
           <div className="flex items-center gap-2 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 border-b border-neutral-200">
             <input
               ref={searchRef}
@@ -157,8 +159,9 @@ export function PrefectureCombobox({
               </p>
             )}
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </>
   );
 }

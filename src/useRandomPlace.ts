@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import * as d3 from "d3";
 import { PlaceType, Location } from "./type";
 import { sleep } from "./util/sleep";
@@ -43,7 +43,7 @@ function randomFeatureCoordinates(feature: d3.ExtendedFeature) {
 
 export function useRandomPlace(
   placeType: PlaceType,
-  index: number,
+  prefecture: string,
   initialLocation?: Location
 ) {
   const { data: jpGeoJson } = useJapanGeoJson();
@@ -55,10 +55,18 @@ export function useRandomPlace(
   const serviceRef = useRef<google.maps.places.PlacesService | null>(null);
   const requestIdRef = useRef(0);
   // Suppress the auto-search on mount when we hydrate from a shared URL.
-  // The skip is released as soon as the user changes placeType/index or
-  // triggers refresh() explicitly.
+  // Release happens only when placeType/prefecture change from the values
+  // captured at mount or when refresh() is called explicitly — the
+  // asynchronous resolution of `prefecture -> index` must not trip it.
   const skipAutoSearchRef = useRef<boolean>(initialLocation !== undefined);
-  const lastInputsRef = useRef({ placeType, index });
+  const lastInputsRef = useRef({ placeType, prefecture });
+
+  const index = useMemo(() => {
+    if (!jpGeoJson || prefecture === "All Prefecture") return -1;
+    return jpGeoJson.features.findIndex(
+      (f) => f.properties?.nam === prefecture
+    );
+  }, [jpGeoJson, prefecture]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,10 +277,10 @@ export function useRandomPlace(
   useEffect(() => {
     const inputsChanged =
       lastInputsRef.current.placeType !== placeType ||
-      lastInputsRef.current.index !== index;
+      lastInputsRef.current.prefecture !== prefecture;
 
     if (inputsChanged) {
-      lastInputsRef.current = { placeType, index };
+      lastInputsRef.current = { placeType, prefecture };
       skipAutoSearchRef.current = false;
     }
 
@@ -282,7 +290,7 @@ export function useRandomPlace(
 
     requestIdRef.current += 1;
     void runSearch(requestIdRef.current);
-  }, [runSearch, placeType, index]);
+  }, [runSearch, placeType, prefecture]);
 
   return {
     location: storeLocation,
