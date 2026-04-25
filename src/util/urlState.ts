@@ -42,7 +42,10 @@ export function readStateFromUrl(): AppUrlState {
   return state;
 }
 
-export function writeStateToUrl(s: AppUrlState): void {
+export function writeStateToUrl(
+  s: AppUrlState,
+  mode: "push" | "replace" = "replace"
+): void {
   if (typeof window === "undefined") return;
 
   const url = new URL(window.location.href);
@@ -68,5 +71,14 @@ export function writeStateToUrl(s: AppUrlState): void {
 
   const query = params.toString();
   const next = `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
-  window.history.replaceState(null, "", next);
+  // Skip when URL is already in the desired state — avoids polluting the
+  // history stack after popstate (browser already updated the URL).
+  const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (next === current) return;
+
+  if (mode === "push") {
+    window.history.pushState(null, "", next);
+  } else {
+    window.history.replaceState(null, "", next);
+  }
 }
