@@ -1,4 +1,5 @@
 import { PLACE_LABEL, Location, PlaceType } from "../type";
+import { PREFECTURE_REGION } from "./prefectureRegions";
 
 export type AppUrlState = {
   placeType?: PlaceType;
@@ -10,6 +11,10 @@ function isPlaceType(v: string): v is PlaceType {
   return Object.prototype.hasOwnProperty.call(PLACE_LABEL, v);
 }
 
+function isKnownPrefecture(v: string): boolean {
+  return Object.prototype.hasOwnProperty.call(PREFECTURE_REGION, v);
+}
+
 export function readStateFromUrl(): AppUrlState {
   if (typeof window === "undefined") return {};
 
@@ -19,8 +24,10 @@ export function readStateFromUrl(): AppUrlState {
   const cat = params.get("cat");
   if (cat && isPlaceType(cat)) state.placeType = cat;
 
+  // Drop unknown values so the displayed label cannot diverge from the
+  // searched region (unknown pref silently maps to nationwide via index=-1).
   const pref = params.get("pref");
-  if (pref) state.prefecture = pref;
+  if (pref && isKnownPrefecture(pref)) state.prefecture = pref;
 
   const loc = params.get("loc");
   if (loc) {
