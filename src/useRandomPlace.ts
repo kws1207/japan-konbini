@@ -293,13 +293,29 @@ export function useRandomPlace(
   // (e.g. Busan). Once the geojson is loaded, drop such hydrated coords and
   // trigger a fresh search instead of stranding the user on a foreign result.
   useEffect(() => {
-    if (!jpGeoJson || !initialLocation || !skipAutoSearchRef.current) return;
-    if (isInJapanBounds([initialLocation.lng, initialLocation.lat])) return;
+    if (!jpGeoJson || !storeLocation || !skipAutoSearchRef.current) return;
+    if (isInJapanBounds([storeLocation.lng, storeLocation.lat])) return;
     skipAutoSearchRef.current = false;
     setStoreLocation(undefined);
     requestIdRef.current += 1;
     void runSearch(requestIdRef.current);
-  }, [initialLocation, isInJapanBounds, jpGeoJson, runSearch]);
+  }, [isInJapanBounds, jpGeoJson, runSearch, storeLocation]);
+
+  const hydrate = useCallback(
+    (s: { placeType: PlaceType; prefecture: string; location?: Location }) => {
+      // Cancel any in-flight search and re-arm the skip guard so the next
+      // render — driven by browser back/forward — doesn't auto-search.
+      requestIdRef.current += 1;
+      lastInputsRef.current = {
+        placeType: s.placeType,
+        prefecture: s.prefecture,
+      };
+      skipAutoSearchRef.current = true;
+      setStoreLocation(s.location);
+      setIsLoading(false);
+    },
+    []
+  );
 
   useEffect(() => {
     const inputsChanged =
@@ -323,5 +339,6 @@ export function useRandomPlace(
     location: storeLocation,
     isLoading,
     refresh,
+    hydrate,
   };
 }

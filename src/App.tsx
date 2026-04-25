@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StreetView } from "./StreetView";
 import { PLACE_ICON, PLACE_LABEL, PlaceType } from "./type";
 import { useRandomPlace } from "./useRandomPlace";
@@ -40,7 +40,7 @@ function App() {
 
   const { data: jpGeoJson, isLoaded } = useJapanGeoJson();
 
-  const { location, isLoading, refresh } = useRandomPlace(
+  const { location, isLoading, refresh, hydrate } = useRandomPlace(
     placeType,
     selected,
     initialUrlState.location
@@ -48,9 +48,51 @@ function App() {
 
   const disabled = !isLoaded || isLoading;
 
+  const isInitialMount = useRef(true);
+  // Set when a user action (Go!/category/prefecture change) initiates a new
+  // navigation. The next URL write consumes it as a push; subsequent writes
+  // for the same navigation (search-result location update) replace in place.
+  const navIntentRef = useRef(false);
+
   useEffect(() => {
-    writeStateToUrl({ placeType, prefecture: selected, location });
+    const mode =
+      !isInitialMount.current && navIntentRef.current ? "push" : "replace";
+    navIntentRef.current = false;
+    isInitialMount.current = false;
+    writeStateToUrl({ placeType, prefecture: selected, location }, mode);
   }, [placeType, selected, location]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const s = readStateFromUrl();
+      const nextPlaceType = s.placeType ?? "convenience_store";
+      const nextPrefecture = s.prefecture ?? "All Prefecture";
+      setPlaceType(nextPlaceType);
+      setSelected(nextPrefecture);
+      hydrate({
+        placeType: nextPlaceType,
+        prefecture: nextPrefecture,
+        location: s.location,
+      });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [hydrate]);
+
+  const handlePlaceTypeChange = useCallback((v: PlaceType) => {
+    navIntentRef.current = true;
+    setPlaceType(v);
+  }, []);
+
+  const handlePrefectureChange = useCallback((v: string) => {
+    navIntentRef.current = true;
+    setSelected(v);
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    navIntentRef.current = true;
+    refresh();
+  }, [refresh]);
 
   useEffect(() => {
     if (!toast) return;
@@ -134,7 +176,7 @@ function App() {
                     ? "bg-neutral-900 text-white border-neutral-900"
                     : "bg-white text-neutral-800 border-neutral-300 hover:border-neutral-500"
                 }`}
-                onClick={() => setPlaceType(key)}
+                onClick={() => handlePlaceTypeChange(key)}
               >
                 <span className="text-[14px]" aria-hidden="true">
                   {PLACE_ICON[key]}
@@ -146,7 +188,7 @@ function App() {
           <PrefectureCombobox
             features={jpGeoJson?.features}
             value={selected}
-            onChange={setSelected}
+            onChange={handlePrefectureChange}
             disabled={!isLoaded}
             variant="desktop"
           />
@@ -157,7 +199,7 @@ function App() {
                 ? "bg-neutral-400 shadow-none"
                 : "bg-vermillion shadow-[3px_3px_0_#1a1a1a] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#1a1a1a]"
             }`}
-            onClick={refresh}
+            onClick={handleRefresh}
             disabled={disabled}
           >
             {!isLoaded
@@ -179,7 +221,7 @@ function App() {
 
       {/* Mobile chrome — below md (BottomSheet + FAB) */}
       <div className="md:hidden">
-        <GoFab onClick={refresh} disabled={disabled} isLoading={isLoading} />
+        <GoFab onClick={handleRefresh} disabled={disabled} isLoading={isLoading} />
 
         <BottomSheet
           expanded={sheetExpanded}
@@ -200,13 +242,13 @@ function App() {
           <SegmentedControl
             label="Place type"
             value={placeType}
-            onChange={setPlaceType}
+            onChange={handlePlaceTypeChange}
             options={PLACE_OPTIONS}
           />
           <PrefectureCombobox
             features={jpGeoJson?.features}
             value={selected}
-            onChange={setSelected}
+            onChange={handlePrefectureChange}
             disabled={!isLoaded}
             variant="mobile"
           />
