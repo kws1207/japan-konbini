@@ -289,6 +289,18 @@ export function useRandomPlace(
     void runSearch(requestIdRef.current);
   }, [runSearch]);
 
+  // A `loc=` shared before the boundary fix landed could point outside Japan
+  // (e.g. Busan). Once the geojson is loaded, drop such hydrated coords and
+  // trigger a fresh search instead of stranding the user on a foreign result.
+  useEffect(() => {
+    if (!jpGeoJson || !initialLocation || !skipAutoSearchRef.current) return;
+    if (isInJapanBounds([initialLocation.lng, initialLocation.lat])) return;
+    skipAutoSearchRef.current = false;
+    setStoreLocation(undefined);
+    requestIdRef.current += 1;
+    void runSearch(requestIdRef.current);
+  }, [initialLocation, isInJapanBounds, jpGeoJson, runSearch]);
+
   useEffect(() => {
     const inputsChanged =
       lastInputsRef.current.placeType !== placeType ||
