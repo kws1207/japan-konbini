@@ -16,3 +16,16 @@ export const PLACE_ICON: { [key in PlaceType]: string } = {
   train_station: "🚉",
   starbucks: "☕",
 } as const;
+
+export const REGIONS = [
+  "Hokkaido",
+  "Tohoku",
+  "Kanto",
+  "Chubu",
+  "Kinki",
+  "Chugoku",
+  "Shikoku",
+  "Kyushu",
+] as const;
+
+export type Region = (typeof REGIONS)[number];

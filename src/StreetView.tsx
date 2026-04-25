@@ -7,6 +7,7 @@ const MAX_HEADING_ATTEMPTS = 20;
 
 export function StreetView({
   location,
+  className,
   ...props
 }: {
   location: Location | undefined;
@@ -98,8 +99,8 @@ export function StreetView({
   }, [location, panorama]);
 
   return (
-    <div {...props}>
-      <div ref={streetViewRef} className="static"></div>
+    <div {...props} className={className}>
+      <div ref={streetViewRef} className="w-full h-full" />
     </div>
   );
 }

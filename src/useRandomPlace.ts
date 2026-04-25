@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import * as d3 from "d3";
 import { PlaceType, Location } from "./type";
 import { sleep } from "./util/sleep";
@@ -41,13 +41,32 @@ function randomFeatureCoordinates(feature: d3.ExtendedFeature) {
   };
 }
 
-export function useRandomPlace(placeType: PlaceType, index: number) {
+export function useRandomPlace(
+  placeType: PlaceType,
+  prefecture: string,
+  initialLocation?: Location
+) {
   const { data: jpGeoJson } = useJapanGeoJson();
-  const [storeLocation, setStoreLocation] = useState<Location | undefined>();
-  const [isLoading, setIsLoading] = useState(true);
+  const [storeLocation, setStoreLocation] = useState<Location | undefined>(
+    initialLocation
+  );
+  const [isLoading, setIsLoading] = useState(!initialLocation);
   const [isServiceReady, setIsServiceReady] = useState(false);
   const serviceRef = useRef<google.maps.places.PlacesService | null>(null);
   const requestIdRef = useRef(0);
+  // Suppress the auto-search on mount when we hydrate from a shared URL.
+  // Release happens only when placeType/prefecture change from the values
+  // captured at mount or when refresh() is called explicitly — the
+  // asynchronous resolution of `prefecture -> index` must not trip it.
+  const skipAutoSearchRef = useRef<boolean>(initialLocation !== undefined);
+  const lastInputsRef = useRef({ placeType, prefecture });
+
+  const index = useMemo(() => {
+    if (!jpGeoJson || prefecture === "All Prefecture") return -1;
+    return jpGeoJson.features.findIndex(
+      (f) => f.properties?.nam === prefecture
+    );
+  }, [jpGeoJson, prefecture]);
 
   useEffect(() => {
     let cancelled = false;
@@ -250,14 +269,28 @@ export function useRandomPlace(placeType: PlaceType, index: number) {
   );
 
   const refresh = useCallback(() => {
+    skipAutoSearchRef.current = false;
     requestIdRef.current += 1;
     void runSearch(requestIdRef.current);
   }, [runSearch]);
 
   useEffect(() => {
+    const inputsChanged =
+      lastInputsRef.current.placeType !== placeType ||
+      lastInputsRef.current.prefecture !== prefecture;
+
+    if (inputsChanged) {
+      lastInputsRef.current = { placeType, prefecture };
+      skipAutoSearchRef.current = false;
+    }
+
+    if (skipAutoSearchRef.current) {
+      return;
+    }
+
     requestIdRef.current += 1;
     void runSearch(requestIdRef.current);
-  }, [runSearch]);
+  }, [runSearch, placeType, prefecture]);
 
   return {
     location: storeLocation,
