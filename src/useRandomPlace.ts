@@ -274,6 +274,22 @@ export function useRandomPlace(
     void runSearch(requestIdRef.current);
   }, [runSearch]);
 
+  const hydrate = useCallback(
+    (s: { placeType: PlaceType; prefecture: string; location?: Location }) => {
+      // Cancel any in-flight search and re-arm the skip guard so the next
+      // render — driven by browser back/forward — doesn't auto-search.
+      requestIdRef.current += 1;
+      lastInputsRef.current = {
+        placeType: s.placeType,
+        prefecture: s.prefecture,
+      };
+      skipAutoSearchRef.current = true;
+      setStoreLocation(s.location);
+      setIsLoading(false);
+    },
+    []
+  );
+
   useEffect(() => {
     const inputsChanged =
       lastInputsRef.current.placeType !== placeType ||
@@ -296,5 +312,6 @@ export function useRandomPlace(
     location: storeLocation,
     isLoading,
     refresh,
+    hydrate,
   };
 }
