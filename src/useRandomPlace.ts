@@ -103,6 +103,19 @@ export function useRandomPlace(
     return { lat, lng };
   }, [index, jpGeoJson]);
 
+  // textSearch (Starbucks) treats location/radius as a bias, not a hard filter,
+  // so prominent results outside Japan (e.g. Busan from a Fukuoka base point)
+  // can be returned. Verify result coords against the loaded prefecture polygons.
+  const isInJapanBounds = useCallback(
+    (point: [number, number]): boolean => {
+      if (!jpGeoJson) return false;
+      return jpGeoJson.features.some((f) =>
+        d3.geoContains(f as d3.ExtendedFeature, point)
+      );
+    },
+    [jpGeoJson]
+  );
+
   const searchNearBy = useCallback(
     (location: Location, radius: number, requestId: number) => {
       if (requestIdRef.current !== requestId || !serviceRef.current) {
@@ -248,10 +261,12 @@ export function useRandomPlace(
             if (!newStoreLocation) {
               continue;
             }
-            setStoreLocation({
-              lat: newStoreLocation.lat(),
-              lng: newStoreLocation.lng(),
-            });
+            const lat = newStoreLocation.lat();
+            const lng = newStoreLocation.lng();
+            if (!isInJapanBounds([lng, lat])) {
+              continue;
+            }
+            setStoreLocation({ lat, lng });
             setIsLoading(false);
             return;
           }
@@ -265,7 +280,7 @@ export function useRandomPlace(
       setStoreLocation(undefined);
       setIsLoading(false);
     },
-    [generateBaseLocation, isServiceReady, jpGeoJson, searchStore]
+    [generateBaseLocation, isInJapanBounds, isServiceReady, jpGeoJson, searchStore]
   );
 
   const refresh = useCallback(() => {
