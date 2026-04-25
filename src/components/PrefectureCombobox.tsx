@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Feature } from "geojson";
+import * as d3 from "d3";
 import { PREFECTURE_REGION } from "../util/prefectureRegions";
 import { REGIONS, Region } from "../type";
 
 type Props = {
-  features: Feature[] | undefined;
+  features: d3.ExtendedFeature[] | undefined;
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
