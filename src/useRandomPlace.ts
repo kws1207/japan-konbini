@@ -103,6 +103,19 @@ export function useRandomPlace(
     return { lat, lng };
   }, [index, jpGeoJson]);
 
+  // textSearch (Starbucks) treats location/radius as a bias, not a hard filter,
+  // so prominent results outside Japan (e.g. Busan from a Fukuoka base point)
+  // can be returned. Verify result coords against the loaded prefecture polygons.
+  const isInJapanBounds = useCallback(
+    (point: [number, number]): boolean => {
+      if (!jpGeoJson) return false;
+      return jpGeoJson.features.some((f) =>
+        d3.geoContains(f as d3.ExtendedFeature, point)
+      );
+    },
+    [jpGeoJson]
+  );
+
   const searchNearBy = useCallback(
     (location: Location, radius: number, requestId: number) => {
       if (requestIdRef.current !== requestId || !serviceRef.current) {
@@ -248,10 +261,12 @@ export function useRandomPlace(
             if (!newStoreLocation) {
               continue;
             }
-            setStoreLocation({
-              lat: newStoreLocation.lat(),
-              lng: newStoreLocation.lng(),
-            });
+            const lat = newStoreLocation.lat();
+            const lng = newStoreLocation.lng();
+            if (!isInJapanBounds([lng, lat])) {
+              continue;
+            }
+            setStoreLocation({ lat, lng });
             setIsLoading(false);
             return;
           }
@@ -265,7 +280,7 @@ export function useRandomPlace(
       setStoreLocation(undefined);
       setIsLoading(false);
     },
-    [generateBaseLocation, isServiceReady, jpGeoJson, searchStore]
+    [generateBaseLocation, isInJapanBounds, isServiceReady, jpGeoJson, searchStore]
   );
 
   const refresh = useCallback(() => {
@@ -273,6 +288,18 @@ export function useRandomPlace(
     requestIdRef.current += 1;
     void runSearch(requestIdRef.current);
   }, [runSearch]);
+
+  // A `loc=` shared before the boundary fix landed could point outside Japan
+  // (e.g. Busan). Once the geojson is loaded, drop such hydrated coords and
+  // trigger a fresh search instead of stranding the user on a foreign result.
+  useEffect(() => {
+    if (!jpGeoJson || !storeLocation || !skipAutoSearchRef.current) return;
+    if (isInJapanBounds([storeLocation.lng, storeLocation.lat])) return;
+    skipAutoSearchRef.current = false;
+    setStoreLocation(undefined);
+    requestIdRef.current += 1;
+    void runSearch(requestIdRef.current);
+  }, [isInJapanBounds, jpGeoJson, runSearch, storeLocation]);
 
   const hydrate = useCallback(
     (s: { placeType: PlaceType; prefecture: string; location?: Location }) => {
